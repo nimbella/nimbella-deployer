@@ -15,7 +15,7 @@ import * as path from 'path'
 import * as fs from 'fs'
 import { getUserAgent } from './api'
 import { DeployStructure, PackageSpec, ActionSpec, WebResource, Includer, ProjectReader, PathKind, Feedback } from './deploy-struct'
-import { emptyStructure, actionFileToParts, filterFiles, convertToResources, promiseFilesAndFilterFiles, loadProjectConfig, errorStructure, getDeployerAnnotation, getBestProjectName } from './util'
+import { emptyStructure, actionFileToParts, filterFiles, convertToResources, promiseFilesAndFilterFiles, loadProjectConfig, errorStructure, getDeployerAnnotation, getBestProjectName, optionalString } from './util'
 import { getBuildForAction, getBuildForWeb } from './finder-builder'
 import { isGithubRef, parseGithubRef, fetchProject } from './github'
 import makeDebug from 'debug'
@@ -41,7 +41,7 @@ interface TopLevel {
     reader: ProjectReader
     feedback: Feedback
 }
-export async function readTopLevel(filePath: string, env: string, includer: Includer, mustBeLocal: boolean, feedback: Feedback): Promise<TopLevel> {
+export async function readTopLevel(filePath: string, env: optionalString, includer: Includer, mustBeLocal: boolean, feedback: Feedback): Promise<TopLevel> {
   // The mustBeLocal arg is only important if the filePath denotes a github location.  In that case, a true value for
   // mustBeLocal causes the github contents to be fetched to a local cache and a FileReader is used.  A false value
   // causes a GithubReader to be used.
@@ -81,11 +81,11 @@ export async function readTopLevel(filePath: string, env: string, includer: Incl
   const webDir = 'web'; const pkgDir = 'packages'
   return reader.readdir('').then(items => {
     items = filterFiles(items)
-    let web: string
-    let config: string
-    let notconfig: string
-    let legacyConfig: string
-    let packages: string
+    let web: string = ''
+    let config: optionalString
+    let notconfig: optionalString
+    let legacyConfig: optionalString
+    let packages: string = ''
     const strays: string[] = []
     for (const item of items) {
       if (item.isDirectory) {
@@ -176,7 +176,7 @@ export function assembleInitialStructure(parts: DeployStructure[]): DeployStruct
 // Merge 'web' portion of config, if any, into the 'web' array read from the file system.  The merge key is the
 // simple name.
 function mergeWeb(fs: WebResource[], config: WebResource[]): WebResource[] {
-  const merge = {}
+  const merge: Record<string, WebResource> = {}
   fs.forEach(resource => {
     merge[resource.simpleName] = resource
   })
@@ -207,7 +207,7 @@ function mergeWebResource(fs: WebResource, config: WebResource): WebResource {
 // Merge 'packages' portion of config, if any, into the 'packages' array read from the file system.
 // The merge key is the package name.
 function mergePackages(fs: PackageSpec[], config: PackageSpec[]): PackageSpec[] {
-  const merge = {}
+  const merge: Record<string, PackageSpec> = {}
   fs.forEach(pkg => {
     merge[pkg.name] = pkg
   })
@@ -265,7 +265,7 @@ function adjustWebExportFlags(pkgs: PackageSpec[]) {
 // Merge the actions portion of a PackageSpec in config, if any, into the corresponding PackageSpec actions read from the file system.
 // The merge key is the action name.
 function mergeActions(fs: ActionSpec[], config: ActionSpec[], pkgName: string): ActionSpec[] {
-  const merge = {}
+  const merge: Record<string, ActionSpec> = {}
   fs.forEach(action => {
     merge[action.name] = action
   })
@@ -353,7 +353,7 @@ function readPackage(pkgPath: string, displayPath: string, pkgName: string, incl
   return reader.readdir(pkgPath).then((items: PathKind[]) => {
     items = filterFiles(items)
     const promises: Promise<ActionSpec>[] = []
-    const seen = {}
+    const seen: Record<string, string> = {}
     for (const item of items) {
       const file = path.join(pkgPath, item.name)
       const displayFile = path.join(displayPath, item.name)
@@ -362,12 +362,14 @@ function readPackage(pkgPath: string, displayPath: string, pkgName: string, incl
         // Directly deployable action not requiring a build.
         const { name, runtime, binary, zipped } = actionFileToParts(item.name)
         if (!includer.isActionIncluded(pkgName, name)) continue
-        const before = seen[name]
-        if (before) {
-          throw duplicateName(name, before, runtime)
-        }
-        seen[name] = runtime
-        promises.push(Promise.resolve({ name, file, displayFile, runtime, binary, zipped, package: pkgName }))
+          if (name && runtime) {
+            const before = seen[name]
+            if (before) {
+              throw duplicateName(name, before, runtime)
+            }
+            seen[name] = runtime
+            promises.push(Promise.resolve({ name, file, displayFile, runtime, binary, zipped, package: pkgName }))
+          }
       } else if (item.isDirectory) {
         // Build-dependent action or renamed action
         if (!includer.isActionIncluded(pkgName, item.name)) continue
@@ -396,7 +398,7 @@ function duplicateName(actionName: string, formerUse: string, newUse: string) {
 }
 
 // Read the config file if present.  For convenience, the extra information not merged from elsewhere is tacked on here
-function readConfig(configFile: string, envPath: string, filePath: string, includer: Includer, reader: ProjectReader,
+function readConfig(configFile: optionalString, envPath: optionalString, filePath: string, includer: Includer, reader: ProjectReader,
   feedback: Feedback): Promise<DeployStructure> {
   if (!configFile) {
     debug('No config file found')

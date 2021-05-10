@@ -33,6 +33,7 @@ import { format } from 'util'
 import { STATUS_CODES } from 'http'
 import { authPersister, getCredentialList } from './credentials'
 import { Feedback } from './deploy-struct'
+import { optionalString } from './util'
 import { GaxiosError } from 'gaxios'
 
 import createDebug from 'debug'
@@ -61,7 +62,7 @@ export interface NimLogger {
 // Wrap the logger in a Feedback for using the deployer API.
 export class NimFeedback implements Feedback {
   logger: NimLogger
-  warnOnly: boolean
+  warnOnly?: boolean
   constructor(logger: NimLogger) {
     this.logger = logger
   }
@@ -78,10 +79,10 @@ export class NimFeedback implements Feedback {
 
 // An alternative NimLogger when not using the oclif stack
 export class CaptureLogger implements NimLogger {
-    command: string[] // The oclif command sequence being captured (aio only)
-    table: Record<string, unknown>[] // The output table (array of entity) if that kind of output was produced
+    command: string[] = []// The oclif command sequence being captured (aio only)
+    table: Record<string, unknown>[] = []// The output table (array of entity) if that kind of output was produced
     captured: string[] = [] // Captured line by line output (flowing via Logger.log)
-    entity: Record<string, unknown> // An output entity if that kind of output was produced
+    entity: Record<string, unknown> = {} // An output entity if that kind of output was produced
     log(msg = '', ...args: any[]): void {
       const msgs = String(msg).split('\n')
       for (const msg of msgs) {
@@ -117,12 +118,12 @@ function isCaptureLogger(logger: NimLogger): logger is CaptureLogger {
 // Dummy stand-in for RuntimeBaseClass in aio (having an aio dependency here causes various problems with building and testing)
 // This is used just as a type for type checking and is not itself instantiated (we are passed real aio classes at runtime)
 class AioCommand extends Command {
-  constructor(rawArgv: string[], config?: IConfig) {
+  constructor(rawArgv: string[], config: IConfig) {
     super(rawArgv, config)
   }
 
   handleError(_msg?: string, _err?: any) { /* no-op */ }
-  parsed: { argv: string[], args: string[], flags: any }
+  parsed?: { argv: string[], args: string[], flags: any }
   logJSON(_hdr: string, _entity: Record<string, unknown>) { /* no-op */ }
   table(data: Record<string, unknown>[], _columns: Record<string, unknown>, _options: Record<string, unknown> = {}) { /* no-op */ }
   async run(_argv?: string[]) { /* no-op */ }
@@ -142,10 +143,10 @@ export abstract class NimBaseCommand extends Command implements NimLogger {
   abstract runCommand(rawArgv: string[], argv: string[], args: any, flags: any, logger: NimLogger): Promise<any>
 
   // Saved command for the case when under a browser and various utilities need the information
-  command: string[]
+  command: string[] = []
 
   // Usage model for when running with kui
-  usage: Record<string, any>
+  usage: Record<string, any> = {}
 
   // A general way of running help from a command.  Use _help in oclif and helpHelper in kui
   doHelp(): void {
@@ -197,6 +198,7 @@ export abstract class NimBaseCommand extends Command implements NimLogger {
     }
     if (isCaptureLogger(logger)) {
       cmd.log = logger.log.bind(logger)
+      // @ts-ignore Temporary fix for this type confusion
       cmd.exit = logger.exit.bind(logger)
       cmd.handleError = logger.handleError.bind(logger)
       debug('aio handleError intercepted in capture mode')
@@ -393,9 +395,9 @@ function fixAioCredentials(logger: NimLogger, flags: any) {
     return
   }
   const store = authPersister.loadCredentialStoreIfPresent()
-  let currentHost: string
-  let currentNamespace: string
-  let currentAuth: string
+  let currentHost: optionalString
+  let currentNamespace: optionalString
+  let currentAuth: optionalString
   if (store) {
     currentHost = store.currentHost
     currentNamespace = store.currentNamespace

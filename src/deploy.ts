@@ -39,21 +39,21 @@ const rimraf = promisify(rimrafOrig)
 // For 'incremental', cleaning is skipped entirely.  Otherwise, cleaning is skipped for portions of
 // the project not included in the deployment.  Note: there should always be an Includer by the time we reach here.
 export async function cleanOrLoadVersions(todeploy: DeployStructure): Promise<DeployStructure> {
-  if (todeploy.flags.incremental) {
+  if (todeploy.flags?.incremental) {
     // Incremental deployment requires the versions up front to have access to the form hashes
     todeploy.versions = loadVersions(todeploy.filePath, todeploy.credentials.namespace, todeploy.credentials.ow.apihost)
   } else {
-    if (todeploy.includer.isWebIncluded && !todeploy.webBuildResult && (todeploy.cleanNamespace || (todeploy.bucket && todeploy.bucket.clean))) {
+    if (todeploy.includer?.isWebIncluded && !todeploy.webBuildResult && (todeploy.cleanNamespace || (todeploy.bucket && todeploy.bucket.clean))) {
       if (todeploy.bucketClient) {
-        const warn = await cleanBucket(todeploy.bucketClient, todeploy.bucket, todeploy.credentials.ow)
+        const warn = await cleanBucket(todeploy.bucketClient, todeploy.bucket, todeploy.credentials?.ow)
         if (warn) {
-          todeploy.feedback.warn(warn)
+          todeploy.feedback?.warn(warn)
         }
-      } else if (todeploy.flags.webLocal) {
+      } else if (todeploy.flags?.webLocal) {
         await rimraf(todeploy.flags.webLocal)
       }
     }
-    if (todeploy.cleanNamespace && todeploy.includer.isIncludingEverything()) {
+    if (todeploy.cleanNamespace && todeploy.includer?.isIncludingEverything()) {
       await wipe(todeploy.owClient)
     } else {
       await cleanActionsAndPackages(todeploy)
@@ -65,7 +65,7 @@ export async function cleanOrLoadVersions(todeploy: DeployStructure): Promise<De
 // Do the actual deployment (after testing the target namespace and cleaning)
 export async function doDeploy(todeploy: DeployStructure): Promise<DeployResponse> {
   let webLocal: string
-  if (todeploy.flags.webLocal) {
+  if (todeploy.flags?.webLocal) {
     webLocal = ensureWebLocal(todeploy.flags.webLocal)
   }
   let webResults: DeployResponse[]
@@ -77,14 +77,14 @@ export async function doDeploy(todeploy: DeployStructure): Promise<DeployRespons
   } else {
     webResults = await deployAllWebResources(todeploy, webLocal)
   }
-  const actionPromises = todeploy.packages.map(pkg => deployPackage(pkg, todeploy))
+  const actionPromises = todeploy.packages?.map(pkg => deployPackage(pkg, todeploy)) ?? []
   const responses: DeployResponse[] = webResults.concat(await Promise.all(actionPromises))
-  responses.push(straysToResponse(todeploy.strays))
+  responses.push(straysToResponse(todeploy.strays ?? []))
   const sequenceResponses = await deploySequences(todeploy)
   responses.push(...sequenceResponses)
   const response = combineResponses(responses)
-  response.apihost = todeploy.credentials.ow.apihost
-  if (!response.namespace) { response.namespace = todeploy.credentials.namespace }
+  response.apihost = todeploy.credentials?.ow.apihost
+  if (!response.namespace) { response.namespace = todeploy.credentials?.namespace }
   return response
 }
 
@@ -140,13 +140,13 @@ function cleanActionsAndPackages(todeploy: DeployStructure): Promise<DeployStruc
   const promises: Promise<any>[] = []
   for (const pkg of todeploy.packages) {
     const defaultPkg = pkg.name === 'default'
-    if (pkg.clean && !defaultPkg && todeploy.includer.isPackageIncluded(pkg.name, true)) {
+    if (pkg.clean && !defaultPkg && todeploy.includer?.isPackageIncluded(pkg.name, true)) {
       // We should have headed off 'clean' of the default package already.  The added test is just in case
       promises.push(cleanPackage(todeploy.owClient, pkg.name, todeploy.versions))
     } else if (pkg.actions) {
       const prefix = defaultPkg ? '' : pkg.name + '/'
       for (const action of pkg.actions) {
-        if (action.clean && todeploy.includer.isActionIncluded(pkg.name, action.name) && !action.buildResult) {
+        if (action.clean && todeploy.includer?.isActionIncluded(pkg.name, action.name) && !action.buildResult) {
           if (todeploy.versions && todeploy.versions.actionVersions) {
             delete todeploy.versions.actionVersions[action.name]
           }
