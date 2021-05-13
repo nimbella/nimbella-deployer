@@ -21,6 +21,7 @@ import rimrafOrig from 'rimraf'
 import { promisify } from 'util'
 import makeDebug from 'debug'
 import { authPersister, getGithubAuth } from './credentials'
+import { optionalString } from './util'
 
 const rimraf = promisify(rimrafOrig)
 const debug = makeDebug('nim:deployer:github')
@@ -28,6 +29,7 @@ const debug = makeDebug('nim:deployer:github')
 const TEMP = process.platform === 'win32' ? process.env.TEMP : '/tmp'
 const CACHE_DIR = 'deployer-git-cache'
 function cacheDir() {
+  if (!TEMP) throw new Error('Missing TEMP directory from process.env.TEMP')
   return Path.join(TEMP, CACHE_DIR)
 }
 
@@ -64,7 +66,7 @@ export function isGithubRef(projectPath: string): boolean {
 export function parseGithubRef(projectPath: string): GithubDef {
   // First isolate the 'ref' portion from the 'real project path'
   const hashSplit = projectPath.split('#')
-  let ref: string
+  let ref: optionalString 
   if (hashSplit.length > 2) {
     throw new Error('too many # characters in GitHub reference')
   } else if (hashSplit.length === 2) {
@@ -72,7 +74,7 @@ export function parseGithubRef(projectPath: string): GithubDef {
     projectPath = hashSplit[0]
   }
   // Strip the prefix.  Make sure this really is a github path (should be if we are called at all)
-  let toParse: string
+  let toParse: optionalString
   for (const prefix of prefixes) {
     if (projectPath.startsWith(prefix)) {
       toParse = projectPath.replace(prefix, '')

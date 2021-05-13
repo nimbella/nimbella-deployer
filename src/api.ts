@@ -142,12 +142,12 @@ export async function readProject(projectPath: string, envPath: string, includer
 // 'Build' the project by running the "finder builder" steps in each action-as-directory and in the web directory
 export function buildProject(project: DeployStructure): Promise<DeployStructure> {
   debug('Starting buildProject with spec %O', project)
-  let webPromise: Promise<WebResource[]|Error>
+  let webPromise: Promise<WebResource[]|Error> | undefined
   project.sharedBuilds = { }
   if (project.webBuild) {
     webPromise = buildWeb(project).catch(err => Promise.resolve(err))
   }
-  const actionPromise: Promise<PackageSpec[]> = buildAllActions(project)
+  const actionPromise: Promise<PackageSpec[]> | undefined = buildAllActions(project)
   if (webPromise) {
     if (actionPromise) {
       return Promise.all([webPromise, actionPromise]).then(result => {

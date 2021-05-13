@@ -49,8 +49,9 @@ export function deployToWebLocal(resource: WebResource, webLocal: string, spec: 
   }
   // Copy
   try {
+    if (!resource.filePath) throw new Error('missing resource.filePath - nothing to copy from...')
     fs.copyFileSync(resource.filePath, destination)
-    const response = wrapSuccess(destination, 'web', false, undefined, {}, undefined)
+    const response = wrapSuccess(destination, 'web', false, undefined, {}, '')
     return Promise.resolve(response)
   } catch (err) {
     return Promise.resolve(wrapError(err, `web resource '${resource.simpleName}'`))

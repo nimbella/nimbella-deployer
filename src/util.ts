@@ -592,7 +592,7 @@ export function straysToResponse(strays: string[]): DeployResponse {
 }
 
 // Wrap a single success as a DeployResponse
-export function wrapSuccess(name: string, kind: DeployKind, skipped: boolean, wrapping: string, actionVersions: VersionMap,
+export function wrapSuccess(name: string, kind: DeployKind, skipped: boolean, wrapping: optionalString, actionVersions: VersionMap,
   namespace: string): DeployResponse {
   const success: DeploySuccess = { name, kind, skipped, wrapping }
   return { successes: [success], failures: [], ignored: [], namespace, packageVersions: {}, actionVersions }

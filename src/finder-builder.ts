@@ -55,14 +55,14 @@ export function getBuildForAction(filepath: string, reader: ProjectReader): Prom
 // Build all the actions in an array of PackageSpecs, returning a new array of PackageSpecs.  We try to return
 // undefined for the case where no building occurred at all, since we are obligated to return a full array if
 // any building occurred, even if most things weren't subject to building.
-export function buildAllActions(spec: DeployStructure): Promise<PackageSpec[]> {
+export function buildAllActions(spec: DeployStructure): Promise<PackageSpec[]> | undefined {
   const packages = spec.packages
   if (!packages || packages.length === 0) {
     return undefined
   }
   // If there are any packages, we are going to have to search through them but if none of them build anything we can punt
   const pkgMap = mapPackages(packages)
-  const promises: Promise<PackageSpec>[] = []
+  const promises: Promise<PackageSpec | undefined >[] = []
   for (const pkg of packages) {
     if (pkg.actions && pkg.actions.length > 0) {
       const builtPackage = buildActionsOfPackage(pkg, spec)
@@ -72,7 +72,7 @@ export function buildAllActions(spec: DeployStructure): Promise<PackageSpec[]> {
   if (promises.length === 0) {
     return undefined
   }
-  return Promise.all(promises).then((newpkgs: PackageSpec[]) => {
+  return Promise.all(promises).then((newpkgs: (PackageSpec| undefined)[]) => {
     for (const pkg of newpkgs) {
       if (pkg) {
         pkgMap[pkg.name] = pkg
@@ -83,10 +83,10 @@ export function buildAllActions(spec: DeployStructure): Promise<PackageSpec[]> {
 }
 
 // Build the actions of a package, returning an updated PackageSpec or undefined if nothing got built
-async function buildActionsOfPackage(pkg: PackageSpec, spec: DeployStructure): Promise<PackageSpec> {
-  const actionMap = mapActions(pkg.actions)
+async function buildActionsOfPackage(pkg: PackageSpec, spec: DeployStructure): Promise<PackageSpec | undefined> {
+  const actionMap = mapActions(pkg.actions ?? [])
   let nobuilds = true
-  for (const action of pkg.actions) {
+  for (const action of pkg.actions ?? []) {
     if (action.build) {
       nobuilds = false
       const builtAction = await buildAction(action, spec).catch(err => {
