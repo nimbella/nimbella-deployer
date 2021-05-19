@@ -217,6 +217,9 @@ async function processIncludeFileItems(items: string[], dirPath: string, reader:
 // If there is more than one file, perform autozipping.
 async function identifyActionFiles(action: ActionSpec, incremental: boolean = false, verboseZip: boolean = false, reader: ProjectReader,
   feedback: Feedback): Promise<ActionSpec> {
+  if (!action.file) {
+    throw new Error('action missing mandatory file')
+  }
   let includesPath = path.join(action.file, '.include')
   if (!await reader.isExistingFile(includesPath)) {
     // Backward compatibility: try .source also
@@ -235,7 +238,9 @@ async function identifyActionFiles(action: ActionSpec, incremental: boolean = fa
     })
   }
   return getIgnores(action.file, reader).then(ignore => {
+    if (!action.file) return Promise.reject(new Error(`Action '${action.name}' has no file`))
     return promiseFilesAndFilterFiles(action.file, reader).then((items: string[]) => {
+      if (!action.file) return Promise.reject(new Error(`Action '${action.name}' has no file`))
       items = applyIgnores(action.file, items, ignore)
       if (items.length === 0) {
         return Promise.reject(new Error(`Action '${action.name}' has no included files`))
@@ -243,7 +248,7 @@ async function identifyActionFiles(action: ActionSpec, incremental: boolean = fa
         return singleFileBuilder(action, items[0])
       } else {
         const pairs = items.map(item => {
-          const shortName = item.substring(action.file.length + 1)
+          const shortName = item.substring((action?.file?.length ?? 0) + 1)
           return [item, shortName]
         })
         return autozipBuilder(pairs, action, incremental, verboseZip, reader, feedback)
@@ -380,7 +385,7 @@ function isSharedBuild(items: PathKind[]): boolean {
 }
 
 // Determine the build step for the web directory or return undefined if there isn't one
-export function getBuildForWeb(filepath: string, reader: ProjectReader): Promise<string> {
+export function getBuildForWeb(filepath: string, reader: ProjectReader): Promise<optionalString> {
   if (!filepath) {
     return Promise.resolve(undefined)
   }
@@ -392,6 +397,8 @@ export function buildWeb(spec: DeployStructure): Promise<WebResource[]> {
   let scriptPath
   const displayPath = path.join(getBestProjectName(spec), 'web')
   const { reader, flags, feedback, sharedBuilds, webBuild } = spec
+  if (!reader) throw new Error('reader is null.')
+  if (!feedback) throw new Error('feedback is null.')
   switch (webBuild) {
   case 'build.sh':
     scriptPath = makeLocal(reader, 'web')
@@ -482,6 +489,7 @@ async function checkRemoteBuildPreReqs(filepath: string, project: DeployStructur
     throw new Error('Remote building requires storage credentials')
   }
   const reader = project.reader
+  if (!reader) throw new Error('reader is null.')
   if ((await reader.getPathKind(filepath)).isDirectory) {
     const include = path.join(filepath, '.include')
     if (await reader.isExistingFile(include)) {
@@ -500,6 +508,9 @@ async function checkRemoteBuildPreReqs(filepath: string, project: DeployStructur
 
 // Initiate request to builder for building an action
 async function doRemoteActionBuild(action: ActionSpec, project: DeployStructure): Promise<ActionSpec> {
+  if (!action.file) throw new Error('action.file is null.')
+  if (!project.reader) throw new Error('project.reader is null.')
+
   // Check that a remote build is supportable
   await checkRemoteBuildPreReqs(action.file, project)
   // Get the zipper
@@ -529,6 +540,7 @@ async function doRemoteActionBuild(action: ActionSpec, project: DeployStructure)
   debug('outputPromise settled for project slice of action %s', action.name)
   const toSend = (output as memoryStreams.WritableStream).toBuffer()
   debug('sending the remote build request for project %s and action %s', project.filePath, actionName)
+  if (!project.owClient) throw new Error('Missing OW client')
   action.buildResult = await invokeRemoteBuilder(toSend, project.credentials, project.owClient, project.feedback, action)
   return action
 }
@@ -539,7 +551,7 @@ async function doRemoteActionBuild(action: ActionSpec, project: DeployStructure)
 // This may require changing the single-file case to a multi-file case.
 async function appendToZip(zip: archiver.Archiver, actionPath: string, reader: ProjectReader, generateBuild: string): Promise<string> {
   const kind = await reader.getPathKind(actionPath)
-  let analyzeForRuntime: string[]
+  let analyzeForRuntime: string[] = []
   if (kind.isFile) {
     if (generateBuild) {
       // Change to multi-file case, although there is still only one source file
@@ -584,6 +596,9 @@ async function appendAndCheck(zip: archiver.Archiver, file: string, actionPath: 
 
 // Initiate request to builder for building web content
 async function doRemoteWebBuild(project: DeployStructure) {
+  if (!project.reader) throw new Error('project.reader is null.')
+  if (!project.owClient) throw new Error('project.owClient is null.')
+
   // Check that a remote build is supportable
   await checkRemoteBuildPreReqs('web', project)
   // Get the zipper
@@ -607,7 +622,7 @@ async function doRemoteWebBuild(project: DeployStructure) {
 function makeConfigFromActionSpec(action: ActionSpec, spec: DeployStructure, pkgName: string): DeployStructure {
   debug('converting action spec to sliced project.yml: %O', action)
   const { targetNamespace, cleanNamespace, parameters, credentials, flags, deployerAnnotation } = spec
-  flags.remoteBuild = false
+  if (flags) flags.remoteBuild = false
   const { name, runtime, main, binary, zipped, web, webSecure, annotations, environment, limits, clean } = action
   const newSpec = { targetNamespace, cleanNamespace, parameters, credentials, flags, deployerAnnotation, slice: true } as DeployStructure
   const newAction = {
@@ -626,7 +641,8 @@ function makeConfigFromActionSpec(action: ActionSpec, spec: DeployStructure, pkg
   } as ActionSpec
   removeUndefined(newSpec)
   removeUndefined(newAction)
-  const pkg = spec.packages.find(pkg => pkg.name === pkgName)
+  const pkg = spec?.packages?.find(pkg => pkg.name === pkgName)
+  if (!pkg) throw new Error(`Unable to find package with same name: ${pkgName}`)
   pkg.actions = [newAction]
   newSpec.packages = [pkg]
   return newSpec
@@ -637,7 +653,7 @@ function makeConfigFromActionSpec(action: ActionSpec, spec: DeployStructure, pkg
 function makeConfigFromWebSpec(project: DeployStructure): DeployStructure {
   debug('converting project spec to sliced project.yml for web building')
   const { targetNamespace, cleanNamespace, bucket, credentials, flags, deployerAnnotation } = project
-  flags.remoteBuild = false
+  if (flags) flags.remoteBuild = false
   return removeUndefined({ targetNamespace, cleanNamespace, bucket, credentials, flags, deployerAnnotation, slice: true })
 }
 
@@ -695,7 +711,7 @@ function makeProjectSliceZip(context: string): ProjectSliceZip {
 }
 
 // Invoke the remote builder, return the response.  The 'action' argument is omitted for web builds
-async function invokeRemoteBuilder(zipped: Buffer, credentials: Credentials, owClient: openwhisk.Client, feedback: Feedback, action?: ActionSpec): Promise<string> {
+async function invokeRemoteBuilder(zipped: Buffer, credentials: Credentials | undefined, owClient: openwhisk.Client, feedback: Feedback | undefined, action?: ActionSpec): Promise<string> {
   // Upload project slice to the user's data bucket
   const remoteName = getRemoteBuildName()
   const urlResponse = await owClient.actions.invoke({
@@ -716,13 +732,13 @@ async function invokeRemoteBuilder(zipped: Buffer, credentials: Credentials, owC
   debug('axios put of url was successful')
   // Invoke the remote builder action.  The action name incorporates the runtime 'kind'.
   // That action will re-invoke the nim deployer in the target runtime.
-  const kind = action ? action.runtime : 'nodejs:default'
+  const kind = action && action.runtime ? action.runtime : 'nodejs:default'
   const activityName = action ? `action '${action.name}'` : 'web content'
   const runtime = canonicalRuntime(kind).replace(':', '_')
   const buildActionName = `${BUILDER_ACTION_STEM}${runtime}`
   debug(`Invoking remote build action '${buildActionName}' for build '${path.basename(remoteName)} of ${activityName}`)
   const invoked = await owClient.actions.invoke({ name: buildActionName, params: { toBuild: remoteName } })
-  feedback.progress(`Submitted ${activityName} for remote building and deployment in runtime ${kind}`)
+  feedback?.progress(`Submitted ${activityName} for remote building and deployment in runtime ${kind}`)
   return invoked.activationId
 }
 
@@ -815,6 +831,9 @@ async function autozipBuilder(pairs: string[][], action: ActionSpec, incremental
   if (!action.runtime) {
     action.runtime = agreeOnRuntime(pairs.map(pair => pair[0]))
   }
+  if (!action.file) {
+    throw new Error('action missing mandatory file')
+  }
   // If there's real file system, observe and store the zip results there for incremental support
   const targetZip = path.join(action.file, ZIP_TARGET)
   const inMemory = reader.getFSLocation() === null
@@ -889,6 +908,9 @@ async function autozipBuilder(pairs: string[][], action: ActionSpec, incremental
       if (!code) {
         return Promise.reject(new Error('An error occurred in in-memory zipping'))
       }
+      if (!action.file) {
+        throw new Error('action missing mandatory file')
+      }
       zipDebug('in memory zipping complete with code of length %d', code.length)
       action.code = code as string
       return singleFileBuilder(action, action.file)
@@ -947,7 +969,7 @@ function build(cmd: string, args: string[], realPath: string, displayPath: optio
 // The builder for a shell script
 function scriptBuilder(script: string, realPath: string, displayPath: optionalString, flags: Flags | undefined, feedback: Feedback): Promise<any> {
   if (flags?.incremental && scriptAppearsBuilt(realPath)) {
-    if (flags.verboseBuild && feedback) {
+    if (flags.verboseBuild) {
       feedback.progress(`Skipping build in ${displayPath} because the action was previously built`)
     }
     return Promise.resolve(true)
@@ -1051,8 +1073,8 @@ function getIgnores(dir: string, reader: ProjectReader): Promise<Ignore> {
   const filePath = path.join(dir, '.ignore')
   const fixedItems = ['.ignore', '.build', 'build.sh', 'build.cmd', ZIP_TARGET, ...getExclusionList()]
   return readFileAsList(filePath, reader).then(items => {
-    return ignore().add(items.concat(fixedItems))
+    return ignore().add(items.concat(fixedItems as string[]))
   }).catch(() => {
-    return ignore().add(fixedItems)
+    return ignore().add(fixedItems as string[])
   })
 }
