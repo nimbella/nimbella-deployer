@@ -16,7 +16,7 @@ import { DeployStructure, ActionSpec, PackageSpec, WebResource, BuildTable, Flag
 import {
   actionFileToParts, filterFiles, mapPackages, mapActions, convertToResources, convertPairsToResources,
   promiseFilesAndFilterFiles, agreeOnRuntime,
-  canonicalRuntime, getBestProjectName, getExclusionList
+  canonicalRuntime, getBestProjectName, getExclusionList, optionalString
 } from './util'
 import * as path from 'path'
 import * as fs from 'fs'
@@ -111,27 +111,29 @@ function buildAction(action: ActionSpec, spec: DeployStructure): Promise<ActionS
   debug('building action %O', action)
   let actionDir
   const { reader, flags, feedback, sharedBuilds } = spec
+  if (!feedback) throw new Error('feedback is null.')
+  if (!reader) throw new Error('reader is null.')
   switch (action.build) {
   case 'build.sh':
     actionDir = makeLocal(reader, action.file)
     return scriptBuilder('./build.sh', actionDir, action.displayFile, flags, feedback).then(() => identifyActionFiles(action,
-      flags.incremental, flags.verboseZip, reader, feedback))
+      flags?.incremental, flags?.verboseZip, reader, feedback))
   case 'build.cmd':
     actionDir = makeLocal(reader, action.file)
     return scriptBuilder('build.cmd', actionDir, action.displayFile, flags, feedback).then(() => identifyActionFiles(action,
-      flags.incremental, flags.verboseZip, reader, feedback))
+      flags?.incremental, flags?.verboseZip, reader, feedback))
   case '.build':
     actionDir = makeLocal(reader, action.file)
     return outOfLineBuilder(actionDir, action.displayFile, sharedBuilds, true, flags, reader, feedback).then(() => identifyActionFiles(action,
-      flags.incremental, flags.verboseZip, reader, feedback))
+      flags?.incremental, flags?.verboseZip, reader, feedback))
   case 'package.json':
     actionDir = makeLocal(reader, action.file)
     return npmBuilder(actionDir, action.displayFile, flags, feedback).then(() => identifyActionFiles(action,
-      flags.incremental, flags.verboseZip, reader, feedback))
+      flags?.incremental, flags?.verboseZip, reader, feedback))
   case '.include':
   case 'identify':
     return identifyActionFiles(action,
-      flags.incremental, flags.verboseZip, reader, feedback)
+      flags?.incremental, flags?.verboseZip, reader, feedback)
   case 'remote':
   case 'remote-default':
     checkBuiltLocally(reader, action.file)
@@ -158,12 +160,15 @@ function joinAndNormalize(...paths: string[]): string {
 
 // Convert a path that is relative to the project root into a path usable with 'fs'.  This should be done only for things
 // that require real building since it will abort the deploy when the project root is a github location.
-function makeLocal(reader: ProjectReader, ...paths: string[]): string {
-  const project = reader.getFSLocation()
+function makeLocal(reader: ProjectReader | undefined, ...paths: optionalString[]): string {
+  const project = reader?.getFSLocation()
   if (!project) {
     throw new Error('invalid call to makeLocal')
   }
-  return path.resolve(project, ...paths)
+  if (paths.length === 0) {
+    throw new Error('missing paths in call to makeLocal')
+  }
+  return path.resolve(project, ...paths as string[])
 }
 
 // Subroutine of processInclude to run after items are read
@@ -210,7 +215,7 @@ async function processIncludeFileItems(items: string[], dirPath: string, reader:
 
 // Identify the files that make up an action directory, based on the files in the directory and .include. .source, or .ignore if present.
 // If there is more than one file, perform autozipping.
-async function identifyActionFiles(action: ActionSpec, incremental: boolean, verboseZip: boolean, reader: ProjectReader,
+async function identifyActionFiles(action: ActionSpec, incremental: boolean = false, verboseZip: boolean = false, reader: ProjectReader,
   feedback: Feedback): Promise<ActionSpec> {
   let includesPath = path.join(action.file, '.include')
   if (!await reader.isExistingFile(includesPath)) {
@@ -273,8 +278,8 @@ function readFileAsList(file: string, reader: ProjectReader): Promise<string[]> 
 
 // Perform a build using either a script or a directory pointed to by a .build directive
 // The .build directive is known to exist but has not been read yet.
-function outOfLineBuilder(filepath: string, displayPath: string, sharedBuilds: BuildTable,
-  isAction: boolean, flags: Flags, reader: ProjectReader, feedback: Feedback): Promise<any> {
+function outOfLineBuilder(filepath: string, displayPath: optionalString, sharedBuilds: BuildTable | undefined,
+  isAction: boolean, flags: Flags | undefined, reader: ProjectReader, feedback: Feedback): Promise<any> {
   const buildPath = path.join(filepath, '.build')
   return readFileAsList(buildPath, reader).then(async contents => {
     if (contents.length === 0 || contents.length > 1) {
@@ -306,7 +311,7 @@ function outOfLineBuilder(filepath: string, displayPath: string, sharedBuilds: B
           return Promise.reject(new Error(redirected + ' is a directory but contains no build information'))
         }
         // Before running the selected build, check for shared build
-        if (isSharedBuild(items)) {
+        if (isSharedBuild(items) && sharedBuilds) {
           // The build is shared so we only run it once
           const buildKey = makeLocal(reader, redirected)
           let buildStatus = sharedBuilds[buildKey]
@@ -413,7 +418,9 @@ export function buildWeb(spec: DeployStructure): Promise<WebResource[]> {
 }
 
 // Check whether path seems to denote a directory that is already built (heuristic).  Throws if case detected
-function checkBuiltLocally(reader: ProjectReader, localPath: string) {
+function checkBuiltLocally(reader: ProjectReader | undefined, localPath: optionalString) {
+  if (!reader) throw new Error('Missing valid filereader from parameters')
+  if (!localPath) throw new Error('Missing valid localPath from parameters')
   const loc = reader.getFSLocation()
   if (!loc) {
     debug('checkBuiltLocally skipped because deploying from github')
@@ -892,8 +899,8 @@ async function autozipBuilder(pairs: string[][], action: ActionSpec, incremental
 }
 
 // Subroutine for performing a "real" build requiring a spawn.
-function build(cmd: string, args: string[], realPath: string, displayPath: string, infoMsg: string,
-  errorTag: string, verbose: boolean, feedback: Feedback): Promise<any> {
+function build(cmd: string, args: string[], realPath: string, displayPath: optionalString, infoMsg: string,
+  errorTag: string, verbose: boolean = false, feedback: Feedback): Promise<any> {
   debug('building with realPath=%s and displayPath=%s', realPath, displayPath)
   let result = ''
   let time = Date.now()
@@ -920,7 +927,7 @@ function build(cmd: string, args: string[], realPath: string, displayPath: strin
       if (code !== 0) {
         if (!verbose) {
           feedback.warn('Output of failed build in %s', realPath)
-          if (isGithubRef(displayPath)) {
+          if (displayPath && isGithubRef(displayPath)) {
             feedback.warn('%s is a cache location for %s', realPath, displayPath)
           }
           feedback.warn(result)
@@ -938,14 +945,14 @@ function build(cmd: string, args: string[], realPath: string, displayPath: strin
 }
 
 // The builder for a shell script
-function scriptBuilder(script: string, realPath: string, displayPath: string, flags: Flags, feedback: Feedback): Promise<any> {
-  if (flags.incremental && scriptAppearsBuilt(realPath)) {
-    if (flags.verboseBuild) {
+function scriptBuilder(script: string, realPath: string, displayPath: optionalString, flags: Flags | undefined, feedback: Feedback): Promise<any> {
+  if (flags?.incremental && scriptAppearsBuilt(realPath)) {
+    if (flags.verboseBuild && feedback) {
       feedback.progress(`Skipping build in ${displayPath} because the action was previously built`)
     }
     return Promise.resolve(true)
   }
-  return build(script, [], realPath, displayPath, script, script, flags.verboseBuild, feedback)
+  return build(script, [], realPath, displayPath, script, script, flags?.verboseBuild || false, feedback)
 }
 
 // Determine if a shell-script style build appears to have been run.  For this we just check for the presence of a `.built` file since
@@ -1004,13 +1011,13 @@ function makeNpmPackageAppearBuilt(filepath: string) {
 // The builder for npm|yarn install --production or npm|yarn install && npm|yarn run build
 // A package.json must be present since this builder wouldn't have been invoked otherwise.
 // This doesn't mean that npm|yarn install will succeed, just that, if it fails it is for some other reason
-function npmBuilder(filepath: string, displayPath: string, flags: Flags, feedback: Feedback): Promise<any> {
+function npmBuilder(filepath: string, displayPath: optionalString, flags: Flags | undefined, feedback: Feedback): Promise<any> {
   debug('Performing npm build for %s', filepath)
-  const cmd = flags.yarn ? 'yarn' : 'npm'
+  const cmd = flags?.yarn ? 'yarn' : 'npm'
   const npmRunBuild = buildScriptExists(filepath)
   const args = npmRunBuild ? ['install', '&&', cmd, 'run', 'build'] : ['install', '--production']
   const infoMsg = [cmd, ...args].join(' ')
-  if (flags.incremental) {
+  if (flags?.incremental) {
     debug('Detected incremental build')
     const pkgBuilt = npmPackageAppearsBuilt(filepath)
     const scriptBuilt = scriptAppearsBuilt(filepath)
@@ -1025,7 +1032,7 @@ function npmBuilder(filepath: string, displayPath: string, flags: Flags, feedbac
   } else {
     debug('Build was not incremental')
   }
-  return build(cmd, args, filepath, displayPath, infoMsg, `${cmd} install`, flags.verboseBuild, feedback).then(
+  return build(cmd, args, filepath, displayPath, infoMsg, `${cmd} install`, flags?.verboseBuild, feedback).then(
     () => makeNpmPackageAppearBuilt(filepath))
 }
 

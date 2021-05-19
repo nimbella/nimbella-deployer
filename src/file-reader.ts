@@ -16,6 +16,7 @@ import * as Path from 'path'
 import { promisify } from 'util'
 import { ProjectReader, PathKind } from './deploy-struct'
 import makeDebug from 'debug'
+import { optionalString } from './util'
 const debug = makeDebug('nim:deployer:file-reader')
 
 // Don't run promisify at module scope: will fail in browser.  This module will never actually be used in a browser.
@@ -62,7 +63,7 @@ class FileProjectReader implements ProjectReader {
       debug("resolved to directory '%s", path)
       const entries = await fs_readdir(path, { withFileTypes: true })
       const results = entries.map(async entry => {
-        let isFile: boolean, isDirectory: boolean, symlink: string
+        let isFile: boolean = false, isDirectory: boolean = false, symlink: optionalString
         if (entry.isSymbolicLink()) {
           try {
             const fullName = await fs_realpath(Path.resolve(path, entry.name))
@@ -112,9 +113,9 @@ class FileProjectReader implements ProjectReader {
       path = Path.resolve(this.basepath, path)
       const stats = await fs_lstat(path).catch(() => undefined)
       if (!stats) {
-        return undefined
+        throw new Error(`Unable to access file information for ${this.basepath} ${path}`)
       }
-      let symlink: string
+      let symlink: optionalString
       if (stats.isSymbolicLink()) {
         symlink = await fs_readlink(path)
       }
