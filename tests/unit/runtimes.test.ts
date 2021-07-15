@@ -178,8 +178,8 @@ describe('test determing runtime for an extension', () => {
     const known_runtimes = {
       'rs': 'rust:default',
       'js': 'nodejs:default',
-      'ts': 'nodejs:default',
       'py': 'python:default',
+      'ts': 'typescript:default',
       'java': 'java:default',
       'jar': 'java:default',
       'go': 'go:default',
@@ -223,7 +223,8 @@ describe('test determining extension from runtime', () => {
     const known_runtimes = {
       'go': ['go'],
       'java': ['java', 'jar'],
-      'nodejs': ['js', 'ts'],
+      'nodejs': ['js'],
+      'typescript': ['ts'],
       'php': ['php'],
       'python': ['py'],
       'ruby': ['rb'],

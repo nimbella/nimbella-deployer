@@ -25,7 +25,8 @@ export type RuntimesConfig = Record<RuntimeLabel, Runtime[]>
 const FileExtensionRuntimes: Record<RuntimeKind, RuntimeFileExtension[]> = {
   'go': ['go'],
   'java': ['java', 'jar'],
-  'nodejs': ['js', 'ts'],
+  'nodejs': ['js'],
+  'typescript': ['ts'],
   'php': ['php'],
   'python': ['py'],
   'ruby': ['rb'],
