@@ -16,11 +16,12 @@
 
 import * as Path from 'path'
 import * as fs from 'fs'
-import Octokit = require('@octokit/rest');
+import { Octokit } from '@octokit/rest'
 import rimrafOrig from 'rimraf'
 import { promisify } from 'util'
 import makeDebug from 'debug'
 import { authPersister, getGithubAuth } from './credentials'
+import { ResponseHeaders } from '@octokit/types'
 
 const rimraf = promisify(rimrafOrig)
 const debug = makeDebug('nim:deployer:github')
@@ -144,13 +145,12 @@ export function makeClient(def: GithubDef, userAgent: string): Octokit {
 
 // Get contents from a github repo at specific coordinates (path and ref).  All but the path
 // are taken from a GithubDef.  The path is specified as an argument.
-export async function readContents(client: Octokit, def: GithubDef, path: string): Promise<Octokit.ReposGetContentsResponse> {
+export async function readContents(client: Octokit, def: GithubDef, path: string): Promise<any> {
   debug('reading %O at %s', def, path)
   const { owner, repo, ref } = def
-    type ResponseType = Octokit.Response<Octokit.ReposGetContentsResponse>
-    let contents: ResponseType
+    let contents: { status: any; data: any; headers?: ResponseHeaders; url?: string }
     try {
-      contents = await client.repos.getContents(ref ? { owner, repo, path, ref } : { owner, repo, path })
+      contents = await client.repos.getContent(ref ? { owner, repo, path, ref } : { owner, repo, path })
     } catch (err) {
       if (err.status === 404) {
         // Common user error
@@ -173,9 +173,9 @@ export async function readContents(client: Octokit, def: GithubDef, path: string
 }
 
 // Test whether the 'data' array of a repo read response implies that the contents are a project
-export function seemsToBeProject(data: Octokit.ReposGetContentsResponse): boolean {
+export function seemsToBeProject(data: any): boolean {
   if (Array.isArray(data)) {
-    const items = data as Octokit.ReposGetContentsResponseItem[]
+    const items = data
     for (const item of items) {
       if (item.name === 'project.yml' && item.type === 'file') return true
       if (['packages', 'web'].includes(item.name) && item.type === 'dir') return true
@@ -206,7 +206,7 @@ async function fetchDir(client: Octokit, def: GithubDef, path: string, location:
     throw new Error('GitHub location does not contain a \'nim\' project')
   }
   let promise: Promise<any> = Promise.resolve(undefined)
-  for (const item of contents as Octokit.ReposGetContentsResponseItem[]) {
+  for (const item of contents) {
     const target = Path.join(location, item.name)
     if (item.type === 'dir') {
       fs.mkdirSync(target)
