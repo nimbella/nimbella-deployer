@@ -63,8 +63,8 @@ export async function fromPlatform(httpClient: AxiosInstance, platformUrl: strin
 
 // Compute the runtime from the file extension.
 export function runtimeForFileExtension(fileExtension: RuntimeFileExtension): RuntimeKind | undefined {
-  const runtimes = Object.entries(FileExtensionRuntimes).filter((item, i) => item[1].includes(fileExtension))
-  return runtimes.length ? `${runtimes[0][0]}:default` : undefined
+  const runtime = Object.entries(FileExtensionRuntimes).find((item, i) => item[1].includes(fileExtension))
+  return (runtime && runtime.length > 0) ? `${runtime[0]}:default` : undefined
 }
 
 // Does file extension imply binary data?
