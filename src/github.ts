@@ -16,12 +16,16 @@
 
 import * as Path from 'path'
 import * as fs from 'fs'
-import { Octokit } from '@octokit/rest'
+import { Octokit, RestEndpointMethodTypes } from '@octokit/rest'
+import { components } from '@octokit/openapi-types'
 import rimrafOrig from 'rimraf'
 import { promisify } from 'util'
 import makeDebug from 'debug'
 import { authPersister, getGithubAuth } from './credentials'
-import { ResponseHeaders } from '@octokit/types'
+
+type DirectoryItem = components["schemas"]["content-directory"][number]
+type FileContent = components["schemas"]["content-file"]
+type ReposGetContentsResponse = RestEndpointMethodTypes["repos"]["getContent"]["response"]
 
 const rimraf = promisify(rimrafOrig)
 const debug = makeDebug('nim:deployer:github')
@@ -42,13 +46,6 @@ export interface GithubDef {
     auth?: string
     baseUrl?: string
     ref?: string
-}
-
-// Assign a name to the otherwise anonymous branch of the Ocktokit.ReposGetContentResponse union type
-export interface OctokitNonArrayResponse {
-  // The actual type in Octokit has more fields but we don't bother since this is a workaround
-  content: string
-  encoding: BufferEncoding
 }
 
 // Test whether a project path is a github ref
@@ -88,7 +85,7 @@ export function parseGithubRef(projectPath: string): GithubDef {
   while (toParse.startsWith('/')) {
     toParse = toParse.slice(1)
   }
-  // Now parse the unprefixed project path into owner/repo/[path]
+  // Now parse the un-prefixed project path into owner/repo/[path]
   const slashSplit = toParse.split('/')
   if (slashSplit.length < 2) {
     throw new Error('too few / characters in GitHub reference; at least <owner>/<repo> is required')
@@ -145,10 +142,10 @@ export function makeClient(def: GithubDef, userAgent: string): Octokit {
 
 // Get contents from a github repo at specific coordinates (path and ref).  All but the path
 // are taken from a GithubDef.  The path is specified as an argument.
-export async function readContents(client: Octokit, def: GithubDef, path: string): Promise<any> {
+export async function readContents(client: Octokit, def: GithubDef, path: string): Promise<DirectoryItem[] | FileContent> {
   debug('reading %O at %s', def, path)
   const { owner, repo, ref } = def
-    let contents: { status: any; data: any; headers?: ResponseHeaders; url?: string }
+  let contents: ReposGetContentsResponse
     try {
       contents = await client.repos.getContent(ref ? { owner, repo, path, ref } : { owner, repo, path })
     } catch (err) {
@@ -169,13 +166,13 @@ export async function readContents(client: Octokit, def: GithubDef, path: string
     if (!contents.data) {
       throw new Error(`Reading path '${path}' from ${def.owner}/${def.repo}' succeeded but provided no data`)
     }
-    return contents.data
+    return contents.data as (DirectoryItem[] | FileContent)
 }
 
 // Test whether the 'data' array of a repo read response implies that the contents are a project
-export function seemsToBeProject(data: any): boolean {
+export function seemsToBeProject(data: DirectoryItem[]): boolean {
   if (Array.isArray(data)) {
-    const items = data
+    const items = data as DirectoryItem[]
     for (const item of items) {
       if (item.name === 'project.yml' && item.type === 'file') return true
       if (['packages', 'web'].includes(item.name) && item.type === 'dir') return true
@@ -221,13 +218,13 @@ async function fetchDir(client: Octokit, def: GithubDef, path: string, location:
 // Fetch a file into a cache location.   The 'def' argument is used to supply owner,
 // repo and ref.   The auth member is already encoded in the client.  The path is taken from the path argument
 async function fetchFile(client: Octokit, def: GithubDef, path: string, location: string) {
-  const data = await readContents(client, def, path) as OctokitNonArrayResponse
+  const data = await readContents(client, def, path) as FileContent
   // Careful with the following: we want to support empty files but the empty string is falsey.
   if (typeof data.content !== 'string' || !data.encoding) {
     debug('unexpected contents: %O', data)
     throw new Error('Response from \'fetchFile\' was not interpretable')
   }
-  const toWrite = Buffer.from(data.content, data.encoding)
+  const toWrite = Buffer.from(data.content,  data.encoding as BufferEncoding)
   let mode = 0o666
   if (location.endsWith('.sh') || location.endsWith('.cmd')) {
     mode = 0o777
