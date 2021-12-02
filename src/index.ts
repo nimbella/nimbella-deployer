@@ -35,3 +35,4 @@ export { wskRequest, inBrowser, delay, writeSliceResult, getBestProjectName, isT
 export * from './runtimes'
 export { GithubDef, isGithubRef, parseGithubRef, fetchProject } from './github'
 export { deleteSlice } from './slice-reader'
+export { makeIncluder } from './includer'
