@@ -85,6 +85,7 @@ export interface Flags {
     incremental: boolean
     yarn: boolean
     env: string|undefined
+    buildEnv: string|undefined
     webLocal: string|undefined
     include: string|undefined
     exclude: string|undefined
