@@ -132,7 +132,7 @@ export async function load(apihost: string): Promise<RuntimesConfig> {
 // The parsed runtime configuration will be stored in a local cache.
 // API host parameter is used as the cache key.
 // The cached values will be returned after the first call.
-export async function init(): Promise<RuntimesConfig> {
+export async function initRuntimes(): Promise<RuntimesConfig> {
   // Determine the API host either by reading the credential store or looking in the environment.
   // The latter is needed when running in a container performing remote build, since there may not be
   // any credential store.
