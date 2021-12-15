@@ -158,6 +158,7 @@ export interface DeployStructure {
     webBuildError?: Error // Indicates an error in building the web component; the structure is usable but the failure should be reported
     webBuildResult?: string // activation id of remote build
     sequences?: ActionSpec[] // detected during action deployment and deferred until ordinary actions are deployed
+    buildEnv?: Record<string,string> // Build time environment
 }
 
 // Structure declaring ownership of the targetNamespace by this project.  Ownership is recorded only locally (in the credential store)
