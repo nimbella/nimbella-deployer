@@ -53,6 +53,9 @@ export async function readTopLevel(filePath: string, env: string, buildEnv: stri
   if (env && !fs.existsSync(env)) {
     throw new Error(`The specified environment file '${env}' does not exist`)
   }
+  if (buildEnv && !fs.existsSync(buildEnv)) {
+    throw new Error(`The specified environment file '${buildEnv}' does not exist`)
+  }
   let githubPath: string
   let reader: ProjectReader
   if (isGithubRef(filePath)) {
