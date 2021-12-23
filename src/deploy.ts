@@ -38,6 +38,11 @@ type Exec = openwhisk.Exec & { image?: string }
 // Main deploy logic, excluding that assigned to more specialized files
 //
 
+// The max number of operations to have outstanding at a time (for actions and web resources).
+// It isn't obvious how to tune this, but 25 seems to work reliably and 50 sometimes has
+// failures.
+const DEPLOYMENT_CHUNK_SIZE = 25
+
 // Clean resources as requested unless the 'incremental', 'include' or 'exclude' is specified.
 // For 'incremental', cleaning is skipped entirely.  Otherwise, cleaning is skipped for portions of
 // the project not included in the deployment.  Note: there should always be an Includer by the time we reach here.
@@ -92,12 +97,11 @@ export async function doDeploy(todeploy: DeployStructure): Promise<DeployRespons
 }
 
 // Deploy web resources, potentially in chunks to avoid overloading the storage server
-const WEB_CHUNK_MAX = 20 // not sure yet how to tune this
 async function deployAllWebResources(todeploy: DeployStructure, webLocal: string): Promise<DeployResponse[]> {
   let pending = todeploy.web
   const ans: DeployResponse[] = []
   while (pending.length > 0) {
-    const chunk = pending.length > WEB_CHUNK_MAX ? pending.slice(0, WEB_CHUNK_MAX) : pending
+    const chunk = pending.length > DEPLOYMENT_CHUNK_SIZE ? pending.slice(0, DEPLOYMENT_CHUNK_SIZE) : pending
     pending = pending.slice(chunk.length)
     const chunkResults = chunk.map(res => deployWebResource(res, todeploy.actionWrapPackage, todeploy.bucket,
       todeploy.bucketClient, todeploy.flags.incremental ? todeploy.versions : undefined, webLocal, todeploy.reader,
@@ -227,6 +231,21 @@ export async function actionWrap(res: WebResource, reader: ProjectReader, pkgNam
   return { name, file: res.filePath, runtime: 'nodejs:default', binary: false, web: true, code, wrapping: res.filePath, package: pkgName }
 }
 
+// Deploy an array of actions of arbitrary size, ensuring that most CHUNK_SIZE operations
+// are pending at the same time. 
+async function deployActionArray(actions: ActionSpec[], spec: DeployStructure,
+    cleanFlag: boolean): Promise<DeployResponse> {
+  let pending = actions
+  const responses: DeployResponse[] = []  
+  while (pending.length > 0) {
+    const chunk = pending.length > DEPLOYMENT_CHUNK_SIZE ? pending.slice(0, DEPLOYMENT_CHUNK_SIZE) : pending
+    pending = pending.slice(chunk.length)
+    const chunkResults = await Promise.all(chunk.map(action => deployAction(action, spec, cleanFlag))).then(combineResponses)
+    responses.push(chunkResults)
+  }
+  return combineResponses(responses)
+}
+
 // Deploy a package, then deploy everything in it (currently just actions)
 export async function deployPackage(pkg: PackageSpec, spec: DeployStructure): Promise<DeployResponse> {
   const {
@@ -234,8 +253,7 @@ export async function deployPackage(pkg: PackageSpec, spec: DeployStructure): Pr
     owClient: wsk, deployerAnnotation, flags
   } = spec
   if (pkg.name === 'default') {
-    return Promise.all(pkg.actions.map(action => deployAction(action, spec, namespaceIsClean)))
-      .then(combineResponses)
+    return deployActionArray(pkg.actions, spec, namespaceIsClean)
   }
   // Check whether the package metadata needs to be deployed; if so, deploy it.  If not, make a vacuous response with the existing package
   // VersionInfo.   That is needed so that the new versions.json will have the information in it.
@@ -269,8 +287,8 @@ export async function deployPackage(pkg: PackageSpec, spec: DeployStructure): Pr
     })
   }
   // Now deploy (or skip) the actions of the package
-  const promises = pkg.actions.map(action => deployAction(action, spec, pkg.clean || namespaceIsClean)).concat(Promise.resolve(pkgResponse))
-  return Promise.all(promises).then(responses => combineResponses(responses))
+  const actionPromise = await deployActionArray(pkg.actions, spec, pkg.clean || namespaceIsClean)
+  return combineResponses([actionPromise, pkgResponse])
 }
 
 // Deploy an action
