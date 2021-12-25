@@ -29,6 +29,7 @@ import makeDebug from 'debug'
 
 const debug = makeDebug('nim:deployer:deploy')
 const seqDebug = makeDebug('nim:deployer:sequences')
+const chunkDebug = makeDebug('nim:deployer:chunk')
 const rimraf = promisify(rimrafOrig)
 
 // Temp fix until https://github.com/apache/openwhisk-client-js/pull/225 is merged.
@@ -40,8 +41,8 @@ type Exec = openwhisk.Exec & { image?: string }
 
 // The max number of operations to have outstanding at a time (for actions and web resources).
 // It isn't obvious how to tune this, but 25 seems to work reliably and 50 sometimes has
-// failures.
-const DEPLOYMENT_CHUNK_SIZE = 25
+// failures.  I have had success with 40, actually, but don't want to push our luck.
+const DEPLOYMENT_CHUNK_SIZE = parseInt(process.env.DEPLOYMENT_CHUNK_SIZE) || 25
 
 // Clean resources as requested unless the 'incremental', 'include' or 'exclude' is specified.
 // For 'incremental', cleaning is skipped entirely.  Otherwise, cleaning is skipped for portions of
@@ -242,6 +243,7 @@ async function deployActionArray(actions: ActionSpec[], spec: DeployStructure,
     pending = pending.slice(chunk.length)
     const chunkResults = await Promise.all(chunk.map(action => deployAction(action, spec, cleanFlag))).then(combineResponses)
     responses.push(chunkResults)
+    chunkDebug('Deployed chunk of %d actions', chunk.length)
   }
   return combineResponses(responses)
 }
