@@ -534,7 +534,7 @@ function checkForNodeModules(items: string[]) {
 
 // Check that all include file items resolve to "legal" places (inside the directory being built or a 'lib' directory at project root)
 // Returns an error message if an illegal item is found, else the empty string.
-function checkIncludeItems(items: string[], web: boolean): string {
+export function checkIncludeItems(items: string[], web: boolean): string {
   const legalDots = web ? '../lib' : '../../../lib'
   for (const item of items) {
     if (!item || item.length === 0) {
@@ -547,6 +547,7 @@ function checkIncludeItems(items: string[], web: boolean): string {
       return `Illegal use of '..' in an '.include' file`
     }
   }
+  return ""
 }
 
 // Check the .include file, if any, for illegal inclusions.   This permits
