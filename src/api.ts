@@ -150,9 +150,11 @@ export async function readProject(projectPath: string, envPath: string, buildEnv
 }
 
 // 'Build' the project by running the "finder builder" steps in
-// 1.  the 'lib' directory if found
+// 1.  the 'lib' directory if found and if building it is appropriate
 // 2.  each action-as-directory
 // 3.  the 'web' directory if found
+// Steps 2 and 3 can be done in parallel but step 1 must complete before the
+// others are started.
 export async function buildProject(project: DeployStructure, runtimes: RuntimesConfig): Promise<DeployStructure> {
   debug('Starting buildProject with spec %O', project)
   let webPromise: Promise<WebResource[]|Error>
