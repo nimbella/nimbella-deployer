@@ -44,7 +44,7 @@ interface Ignore {
 const ZIP_TARGET = '__deployer__.zip'
 export const BUILDER_NAMESPACE = process.env['TEST_BUILDER_NAMESPACE'] || 'nimbella'
 const BUILDER_ACTION_STEM = `/${BUILDER_NAMESPACE}/builder/build_`
-const GET_UPLOAD_URL = `/${BUILDER_NAMESPACE}/buildmgr/getUploadUrl.json`
+const GET_UPLOAD_URL = `/${BUILDER_NAMESPACE}/buildmgr/getUploadUrl.json?action=`
 const CANNED_REMOTE_BUILD = `#!/bin/bash
 set -e
 /bin/defaultBuild
@@ -835,6 +835,19 @@ async function legacyRemoteBuilder(zipped: Buffer, owClient: openwhisk.Client, f
   }
 }
 
+// Computes the tag to be added to a remote build slice name.  Should be a function of the
+// qualified action name (pkg/action) but with / replaced by _.  Also, if there is no
+// action spec we assume this is a remote web build and use the string 'web'
+function computeTag(action: ActionSpec): string {
+  if (!action) {
+    return 'web'
+  }
+  if (action.package) {
+    return `${action.package}_${action.name}`
+  }
+  return action.name
+}
+
 // Invoke the remote builder, return the response.  The 'action' argument is omitted for web builds
 async function invokeRemoteBuilder(zipped: Buffer, credentials: Credentials, owClient: openwhisk.Client, feedback: Feedback, runtimes: RuntimesConfig, action?: ActionSpec): Promise<string> {
   if (credentials.storageKey) {
@@ -845,8 +858,9 @@ async function invokeRemoteBuilder(zipped: Buffer, credentials: Credentials, owC
   // Upload project slice
   const apihost = credentials.ow.apihost
   const auth = credentials.ow.api_key
-  debug(`Invoking '${GET_UPLOAD_URL}' with apihost '${apihost}' and auth '${auth}'`)
-  const uploadResponse = await invokeWebSecure(GET_UPLOAD_URL, auth, apihost)
+  const invoke = GET_UPLOAD_URL + computeTag(action)
+  debug(`Invoking '${invoke}' with apihost '${apihost}' and auth '${auth}'`)
+  const uploadResponse = await invokeWebSecure(invoke, auth, apihost)
   const { url, sliceName, message } = uploadResponse
   if (!url || !sliceName) {
     const msg = message || `Unexpected response from getUploadUrl`
