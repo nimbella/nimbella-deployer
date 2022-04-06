@@ -16,7 +16,7 @@ import { DeployStructure, ActionSpec, PackageSpec, WebResource, BuildTable, Flag
   Credentials, Feedback } from './deploy-struct'
 import {
   actionFileToParts, filterFiles, mapPackages, mapActions, convertToResources, convertPairsToResources,
-  promiseFilesAndFilterFiles, agreeOnRuntime, getBestProjectName, getExclusionList, invokeWebSecure
+  promiseFilesAndFilterFiles, agreeOnRuntime, getBestProjectName, getExclusionList
 } from './util'
 import * as path from 'path'
 import * as fs from 'fs'
@@ -44,7 +44,7 @@ interface Ignore {
 const ZIP_TARGET = '__deployer__.zip'
 export const BUILDER_NAMESPACE = process.env['TEST_BUILDER_NAMESPACE'] || 'nimbella'
 const BUILDER_ACTION_STEM = `/${BUILDER_NAMESPACE}/builder/build_`
-const GET_UPLOAD_URL = `/${BUILDER_NAMESPACE}/buildmgr/getUploadUrl.json?action=`
+const GET_UPLOAD_URL = `/${BUILDER_NAMESPACE}/builder/getUploadUrl`
 const CANNED_REMOTE_BUILD = `#!/bin/bash
 set -e
 /bin/defaultBuild
@@ -856,14 +856,14 @@ async function invokeRemoteBuilder(zipped: Buffer, credentials: Credentials, owC
     return legacyRemoteBuilder(zipped, owClient, feedback, runtimes, action)
   } // otherwise, we follow the new path using a protected build bucket
   // Upload project slice
-  const apihost = credentials.ow.apihost
-  const auth = credentials.ow.api_key
-  const invoke = GET_UPLOAD_URL + computeTag(action)
-  debug(`Invoking '${invoke}' with apihost '${apihost}' and auth '${auth}'`)
-  const uploadResponse = await invokeWebSecure(invoke, auth, apihost)
-  const { url, sliceName, message } = uploadResponse
+  const params = { action: computeTag(action) }
+  debug(`Invoking 'getUploadUrl'`)
+  // The following should eventually be invoked asynchronously and then polled for completion to deal with the
+  // possibility of being locked out of the invoker pool long enough for the controller to disconnect.
+  const uploadResponse = await owClient.actions.invoke({ name: GET_UPLOAD_URL, blocking: true, result: true, params })
+  const { url, sliceName } = uploadResponse
   if (!url || !sliceName) {
-    const msg = message || `Unexpected response from getUploadUrl`
+    const msg = `Unexpected response from getUploadUrl`
     throw new Error(msg)
   }
   debug('remote build url is %s', url)
