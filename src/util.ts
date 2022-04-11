@@ -113,9 +113,17 @@ export function isRealBuild(buildField: string): boolean {
   }
 }
 
-// Replace a build field with 'remote' if it is supposed to be remote according to flags, directives, environment
-function locateBuild(buildField: string, remoteRequested: boolean, remoteRequired: boolean, localRequired: boolean) {
-  if (isRealBuild(buildField) && (inBrowser || remoteRequired || (remoteRequested && !localRequired))) {
+// Replace a build field with 'remote' or 'remote-default' if it is supposed to be remote according to flags,
+// directives, environment, or the type of runtime.
+function locateBuild(buildField: string, remoteRequested: boolean, defaultRemote: boolean,
+  remoteRequired: boolean, localRequired: boolean) {
+  if (!isRealBuild(buildField)) {
+    return buildField
+  }
+  if (defaultRemote && !localRequired) {
+    return 'remote-default'
+  }
+  if (inBrowser || remoteRequired || (remoteRequested && !localRequired)) {
     return 'remote'
   }
   return buildField
@@ -147,20 +155,15 @@ export async function checkBuildingRequirements(todeploy: DeployStructure, reque
     }
   }
   const webRequiresLocal = (todeploy.bucket && todeploy.bucket.localBuild) || !!todeploy.actionWrapPackage
-  todeploy.webBuild = locateBuild(todeploy.webBuild, requestRemote, todeploy.bucket && todeploy.bucket.remoteBuild, webRequiresLocal)
+  todeploy.webBuild = locateBuild(todeploy.webBuild, requestRemote, false, todeploy.bucket && todeploy.bucket.remoteBuild, webRequiresLocal)
   let needsLocal = todeploy.webBuild !== 'remote' && isRealBuild(todeploy.webBuild)
   if (todeploy.packages) {
     for (const pkg of todeploy.packages) {
       if (pkg.actions) {
         for (const action of pkg.actions) {
-          action.build = locateBuild(action.build, requestRemote, action.remoteBuild, action.localBuild)
-          if (requestRemote && action.build !== 'remote') {
-            if (await hasDefaultRemote(action, todeploy.reader, runtimes)) {
-              action.build = 'remote-default'
-              continue // does not effect needsLocal
-            }
-          }
-          needsLocal = needsLocal || (action.build !== 'remote' && isRealBuild(action.build))
+          const defaultRemote = await hasDefaultRemote(action, todeploy.reader, runtimes)
+          action.build = locateBuild(action.build, requestRemote, defaultRemote, action.remoteBuild, action.localBuild)
+          needsLocal = needsLocal || (!action.build.startsWith('remote') && isRealBuild(action.build))
         }
       }
     }
