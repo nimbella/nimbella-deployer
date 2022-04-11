@@ -118,14 +118,15 @@ export function isRealBuild(buildField: string): boolean {
 function locateBuild(buildField: string, remoteRequested: boolean, defaultRemote: boolean,
   remoteRequired: boolean, localRequired: boolean) {
   if (!isRealBuild(buildField)) {
+    // Not a real build. Check remote-default conditions.
+    if (defaultRemote && !localRequired) {
+      return 'remote-default'
+    } // else does not meet remote-default conditions
     return buildField
-  }
-  if (defaultRemote && !localRequired) {
-    return 'remote-default'
-  }
+  } // else it's a real build. Check conditions for remote.
   if (inBrowser || remoteRequired || (remoteRequested && !localRequired)) {
     return 'remote'
-  }
+  } // else does not meet conditions for remote
   return buildField
 }
 
@@ -163,7 +164,7 @@ export async function checkBuildingRequirements(todeploy: DeployStructure, reque
         for (const action of pkg.actions) {
           const defaultRemote = await hasDefaultRemote(action, todeploy.reader, runtimes)
           action.build = locateBuild(action.build, requestRemote, defaultRemote, action.remoteBuild, action.localBuild)
-          needsLocal = needsLocal || (!action.build.startsWith('remote') && isRealBuild(action.build))
+          needsLocal = needsLocal || (!action.build?.startsWith('remote') && isRealBuild(action.build))
         }
       }
     }
@@ -176,7 +177,7 @@ export async function checkBuildingRequirements(todeploy: DeployStructure, reque
 // known so it is prepared to peek into the project to figure out the operative runtime.
 async function hasDefaultRemote(action: ActionSpec, reader: ProjectReader, runtimes: RuntimesConfig): Promise<boolean> {
   const runtime = await getRuntimeForAction(action, reader, runtimes)
-  if (runtime === '') {
+  if (!runtime) {
     return false 
   }
   const kind = runtime.split(':')[0]
@@ -194,6 +195,9 @@ export async function getRuntimeForAction(action: ActionSpec, reader: ProjectRea
   if (action.runtime) {
     return action.runtime
   }
+  if (action.sequence && action.sequence.length > 0) {
+    return ''
+  }
   const pathKind = await reader.getPathKind(action.file)
   if (pathKind.isFile) {
     let runtime: string
@@ -203,7 +207,7 @@ export async function getRuntimeForAction(action: ActionSpec, reader: ProjectRea
     const files = await promiseFilesAndFilterFiles(action.file, reader)
     return agreeOnRuntime(files, runtimes)
   } else {
-    return ""
+    return ''
   }
 }
 
