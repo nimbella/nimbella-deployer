@@ -806,6 +806,8 @@ export function substituteFromEnvAndFiles(input: string, envPath: string, projec
     if (!subst) {
       badVars.push(envar)
       subst = `<${envar}>`
+    } else {
+      subst = escapeNewlines(subst)
     }
     debug('substitution is: %s', subst)
     result = result + before + subst
@@ -820,6 +822,12 @@ export function substituteFromEnvAndFiles(input: string, envPath: string, projec
     return { content: result, badVars } 
   }
   return { content: result, badVars: undefined }
+}
+
+// Perform escaping of newlines.
+function escapeNewlines(original: string): string {
+  const parts = original.split('\n')
+  return parts.join('\\n')
 }
 
 // Scan forward for the next symbol introducer
