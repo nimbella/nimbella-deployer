@@ -789,7 +789,8 @@ export function substituteFromEnvAndFiles(input: string, envPath: string, projec
       throw new Error('Runaway variable name or path directive in project.yml')
     }
     let subst: string
-    const envar = after.substr(0, endVar).trim()
+    let doStringEscapes = true
+    let envar = after.substr(0, endVar).trim()
     debug('substituting for envar: %s', envar)
     if (nextSym.terminator === ')' || /\s/.test(envar)) {
       warn = warn || nextSym.terminator !== ')'
@@ -798,15 +799,19 @@ export function substituteFromEnvAndFiles(input: string, envPath: string, projec
       if (nextSym.terminator === ')') {
         throw new Error('Invalid substitution: $(' + envar + ')')
       }
-      const fileSubst = path.join(projectPath, envar.slice(1))
+      const fileSubst = path.join(projectPath, envar.slice(1).trim())
       subst = getSubstituteFromFile(fileSubst)
     } else {
+      if (envar.startsWith('|')) {
+        envar = envar.slice(1).trim()
+        doStringEscapes = false
+      }
       subst = process.env[envar] || props[envar]
     }
     if (!subst) {
       badVars.push(envar)
       subst = `<${envar}>`
-    } else {
+    } else if (doStringEscapes) {
       subst = escapeNewlines(subst)
     }
     debug('substitution is: %s', subst)
