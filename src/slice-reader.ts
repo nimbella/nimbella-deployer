@@ -75,7 +75,7 @@ export async function fetchSlice(sliceName: string): Promise<string> {
   const cmd = new GetObjectCommand({ Bucket: bucket, Key: sliceName })
   const result = await s3.send(cmd)
   const content = result.Body as Readable // Body has type ReadableStream<any>|Readable|Blob.  Readable seems to work in practice
-  const destination = new WritableStream({ highWaterMark: 1024 * 1024 })
+  const destination = new WritableStream({ highWaterMark: 8 * 1024 * 1024 })
   await pipe(content, destination)
   const data = (destination as WritableStream).toBuffer()
   const zip = new Zip(data)

@@ -688,11 +688,7 @@ async function appendAndCheck(zip: archiver.Archiver, file: string, actionPath: 
   }
   debug(`mode for ${file} is ${mode}`)
   zip.append(contents, { name: file, mode })
-  const size = zip.pointer()
-  if (size > 512 * 1024) {
-    throw new Error(`Remote build upload for '${actionPath}' exceeds 512K.  Make sure the directory is free of derived artifacts`)
-  }
-  zipDebug("zipped '%s' for remote build slice, emitted %d", file, size)
+  zipDebug("zipped '%s' for remote build slice", file)
 }
 
 // Initiate request to builder for building web content
@@ -781,7 +777,7 @@ interface ProjectSliceZip {
     outputPromise: Promise<any>
 }
 function makeProjectSliceZip(context: string): ProjectSliceZip {
-  const output: Writable = new memoryStreams.WritableStream({ highWaterMark: 1024 * 1024 })
+  const output: Writable = new memoryStreams.WritableStream({ highWaterMark: 8 * 1024 * 1024 })
   const zip = archiver('zip')
   const outputPromise = new Promise(function(resolve, reject) {
     zip.on('error', err => {
