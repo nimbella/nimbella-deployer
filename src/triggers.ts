@@ -16,11 +16,9 @@
 // be rejected.  Eventually, this can be replaced by a dispatching discipline of some sort that looks at the
 // sourceType and calls specialized code for that source type.
 
-// TEMPORARY: this code is invoking actions in /nimbella/triggers/[create|delete] rather than APIs on
-// <digitalOceanAPI>/V2/functions/namespaces/<namespace>/triggers.  As such, it uses an OpenWhisk client
-// to communicate instead of direct use of https with a DigitalOcean access token for authorization.
-// This should change over as soon as the APIs are available on the edge service.
-// This should be the only file that has to change.
+// TEMPORARY: this code is invoking actions in /nimbella/triggers/[create|delete|list|get] rather than
+// APIs more closely associated with the scheduling service.   This is likely to change if this
+// direction is adopted longer term. This should be the only file that has to change.
 
 import openwhisk from 'openwhisk'
 import { TriggerSpec, SchedulerSourceDetails } from './deploy-struct'
