@@ -584,7 +584,7 @@ async function deployActionFromCodeOrSequence(action: ActionSpec, spec: DeploySt
   try {
     const response = await wsk.actions.update(deployParams)
     if (action.triggers) {
-      await deployTriggers(action.triggers, name, wsk)
+      await deployTriggers(action.triggers, name, wsk, spec.credentials.namespace)
     }
     const map = {}
     if (digest) {
