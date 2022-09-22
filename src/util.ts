@@ -1222,6 +1222,8 @@ export async function wipe(client: Client): Promise<void> {
   if (triggers) {
     debug('There are %d DigitalOcean triggers to remove', triggers.length)
     await undeployTriggers(triggers, client, namespace)
+    // TODO errors are being fed back here but are currently ignored.  It is not completely
+    // clear what should be done with them.
   }
 }
 
