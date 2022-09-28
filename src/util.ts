@@ -30,7 +30,6 @@ import * as crypto from 'crypto'
 import * as yaml from 'js-yaml'
 import makeDebug from 'debug'
 import anymatch from 'anymatch'
-import AggregateError from 'aggregate-error'
 import { parseGithubRef } from './github'
 import { nimbellaDir } from './credentials'
 import { isBinaryFileExtension, runtimeForZipMid, runtimeForFileExtension, RuntimesConfig, isValidRuntime} from './runtimes'
@@ -1237,9 +1236,12 @@ export async function wipe(client: Client): Promise<void> {
   debug('Rules wiped')
   await wipeAll(client.triggers, 'Trigger', errors)
   debug('OpenWhisk triggers wiped')
-  // Determine if any errors occurred.  If so, throw them.  We use an AggregateError if there is more than one.
+  // Determine if any errors occurred.  If so, throw them.  We have tried using AggregateError
+  // here but ran into perplexing problems.  So, using an ad hoc approach when combining errors.
   if (errors.length > 1) {
-    throw new AggregateError(errors)
+    const combined = Error('multiple errors occurred while cleaning the namespace') as any
+    combined.errors = errors
+    throw combined
   } 
   if (errors.length == 1){
     throw errors[0]
