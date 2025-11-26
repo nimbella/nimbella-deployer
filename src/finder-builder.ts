@@ -1262,7 +1262,7 @@ function npmBuilder(filepath: string, displayPath: string, flags: Flags, buildEn
   debug('Performing npm build for %s', filepath)
   const cmd = flags.yarn ? 'yarn' : 'npm'
   const npmRunBuild = buildScriptExists(filepath)
-  const args = npmRunBuild ? ['install', '&&', cmd, 'run', 'build'] : ['install', '--production']
+  const args = npmRunBuild ? ['install','--ignore-scripts', '&&', cmd, 'run', 'build'] : ['install','--ignore-scripts', '--production']
   const infoMsg = [cmd, ...args].join(' ')
   if (flags.incremental) {
     debug('Detected incremental build')
@@ -1279,7 +1279,7 @@ function npmBuilder(filepath: string, displayPath: string, flags: Flags, buildEn
   } else {
     debug('Build was not incremental')
   }
-  return build(cmd, args, filepath, displayPath, infoMsg, `${cmd} install`, flags.verboseBuild, buildEnv, slice, feedback).then(
+  return build(cmd, args, filepath, displayPath, infoMsg, `${cmd} install --ignore-scripts`, flags.verboseBuild, buildEnv, slice, feedback).then(
     () => makeNpmPackageAppearBuilt(filepath))
 }
 
